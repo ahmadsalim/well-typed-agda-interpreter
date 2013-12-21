@@ -12,6 +12,10 @@ import Data.String as Str
 open import Data.Nat.Show
 import Data.List as List
 
+infix 3 _:::_,_
+infix 2 _∈_
+infix 1 _⊢_
+
 data `Set : Set where
   `Nat  : `Set
   `Bool : `Set
@@ -29,92 +33,63 @@ data `Set : Set where
 # (` t + s) = # t ⊎ # s
  
 data Γ : Set where
-  ε       : Γ 
-  _of_,_   : Char → `Set → Γ → Γ 
+  ·         : Γ 
+  _:::_,_   : Char → `Set → Γ → Γ 
 
-data Elem :  Char → Γ → Set where
-  H  : ∀ {x x′ e t } → {{eq : (x == x′) ≡ true}} → Elem x (x′ of t , e)
-  TH : ∀ {x y e t } → {{eq : (x == y) ≡ false}} → Elem x e → Elem x (y of t , e)
+data _∈_ :  Char → Γ → Set where
+  H  : ∀ {x x′ Δ t } → {{eq : (x == x′) ≡ true}} → x ∈ x′ ::: t , Δ
+  TH : ∀ {x y Δ t } → {{eq : (x == y) ≡ false}} → x ∈ Δ → x ∈ y ::: t , Δ
 
-lookupΓ : ∀ {x} → (e : Γ) → Elem x e → `Set
-lookupΓ ε ()
-lookupΓ (_ of t , env) H        = t
-lookupΓ (_ of _ , env) (TH idx) = lookupΓ env idx
+!Γ_[_] : ∀ {x} → (Δ : Γ) → x ∈ Δ → `Set
+!Γ_[_] · ()
+!Γ _ ::: t , Δ [ H ]     = t
+!Γ _ ::: _ , Δ [ TH i ]  = !Γ Δ [ i ]
 
-data Expr : Γ → `Set → Set where
-  `false       : ∀ {e} → Expr e `Bool
-  `true        : ∀ {e} → Expr e `Bool
-  `n_          : ∀ {e} → ℕ    → Expr e `Nat
-  ``_[_]       : ∀ {e} → (x : Char) → (idx : Elem x e) → Expr e (lookupΓ e idx)
-  `_·_         : ∀ {e t s} → Expr e (` t ⇨ s) → Expr e t → Expr e s
-  `λ_`of_⇨_     : ∀ {e tr} → (x : Char) → (tx : `Set) → Expr (x of tx , e) tr → Expr e (` tx ⇨ tr) 
-  `_+_         : ∀ {e} → Expr e `Nat → Expr e `Nat → Expr e `Nat
-  `_*_         : ∀ {e} → Expr e `Nat → Expr e `Nat → Expr e `Nat
-  `_∧_         : ∀ {e} → Expr e `Bool → Expr e `Bool → Expr e `Bool
-  `_∨_         : ∀ {e} → Expr e `Bool → Expr e `Bool → Expr e `Bool
-  `_≤_         : ∀ {e} → Expr e `Nat → Expr e `Nat → Expr e `Bool
-  `¬_          : ∀ {e} → Expr e `Bool → Expr e `Bool 
-  `_,_         : ∀ {e t s} → Expr e t → Expr e s → Expr e (` t × s)
-  `fst         : ∀ {e t s} → Expr e (` t × s) → Expr e t
-  `snd         : ∀ {e t s} → Expr e (` t × s) → Expr e s
-  `left        : ∀ {e t s} → Expr e t → Expr e (` t + s)
-  `right       : ∀ {e t s} → Expr e s → Expr e (` t + s)
-  `case_`of_||_ : ∀ {e t s u} → Expr e (` t + s) → Expr e (` t ⇨ u) → Expr e (` s ⇨ u) → Expr e u
-  `tt          : ∀ {e} → Expr e `Unit
-  `let_:=_`in_ : ∀ {e th tb} → (x : Char) → Expr e th → Expr (x of th , e) tb → Expr e tb
-  `if_`then_`else_ : ∀ {e t} → Expr e `Bool → Expr e t → Expr e t → Expr e t
+data _⊢_ : Γ → `Set → Set where
+  `false           : ∀ {Δ} → Δ ⊢ `Bool
+  `true            : ∀ {Δ} → Δ ⊢ `Bool
+  `n_              : ∀ {Δ} → ℕ → Δ ⊢ `Nat
+  ``_[_]           : ∀ {Δ} → (x : Char) → (i : x ∈ Δ) → Δ ⊢ !Γ Δ [ i ]
+  `_₋_              : ∀ {Δ t s} → Δ ⊢ ` t ⇨ s → Δ ⊢ t → Δ ⊢ s
+  `λ_`:_⇨_         : ∀ {Δ tr} → (x : Char) → (tx : `Set) 
+                        → x ::: tx , Δ ⊢ tr → Δ ⊢ ` tx ⇨ tr
+  `_+_             : ∀ {Δ} → Δ ⊢ `Nat → Δ ⊢ `Nat → Δ ⊢ `Nat
+  `_*_             : ∀ {Δ} → Δ ⊢ `Nat →  Δ ⊢ `Nat → Δ ⊢ `Nat
+  `_∧_             : ∀ {Δ} → Δ ⊢ `Bool → Δ ⊢ `Bool → Δ ⊢ `Bool
+  `_∨_             : ∀ {Δ} → Δ ⊢ `Bool →  Δ ⊢ `Bool → Δ ⊢ `Bool
+  `_≤_             : ∀ {Δ} → Δ ⊢ `Nat → Δ ⊢ `Nat →  Δ ⊢ `Bool
+  `¬_              : ∀ {Δ} → Δ ⊢ `Bool →  Δ ⊢ `Bool 
+  `_,_             : ∀ {Δ t s} → Δ ⊢ t →  Δ ⊢ s →  Δ ⊢ ` t × s
+  `fst             : ∀ {Δ t s} → Δ ⊢ ` t × s → Δ ⊢ t
+  `snd             : ∀ {Δ t s} → Δ ⊢ ` t × s → Δ ⊢ s
+  `left            : ∀ {Δ t s} → Δ ⊢ t → Δ ⊢ ` t + s
+  `right           : ∀ {Δ t s} → Δ ⊢ s → Δ ⊢ ` t + s
+  `case_`of_||_    : ∀ {Δ t s u} → Δ ⊢ ` t + s 
+                        → Δ ⊢ ` t ⇨ u → Δ ⊢ ` s ⇨ u → Δ ⊢ u
+  `tt              : ∀ {Δ} → Δ ⊢ `Unit
+  `let_`=_`in_     : ∀ {Δ th tb} → (x : Char) 
+                       → Δ ⊢ th → x ::: th , Δ ⊢ tb → Δ ⊢ tb
+  `if_`then_`else_ : ∀ {Δ t} → Δ ⊢ `Bool → Δ ⊢ t → Δ ⊢ t → Δ ⊢ t
 
-data Env : Γ → Set₁ where
-  []    : Env ε
-  _∷_  : ∀ {x t e} → # t → Env e → Env (x of t , e)
+data ⟨_⟩ : Γ → Set₁ where
+  []   : ⟨ · ⟩
+  _∷_  : ∀ {x t Δ} → # t → ⟨ Δ ⟩ → ⟨ x ::: t , Δ ⟩
 
-lookupEnv : ∀ {x} → (e : Γ) → Env e → (idx : Elem x e) → # lookupΓ e idx
-lookupEnv ε [] ()
-lookupEnv (_ of _ , tenv) (val ∷ env) H = val
-lookupEnv (_ of _ , tenv) (val ∷ env) (TH i) = lookupEnv tenv env i 
+!_[_] : ∀ {x Δ} → ⟨ Δ ⟩ → (i : x ∈ Δ) → # !Γ Δ [ i ]
+!_[_] [] ()
+!_[_] (val ∷ env) H      = val
+!_[_] (val ∷ env) (TH i) = ! env [ i ]
 
-printType  : `Set → Str.String
-printType `Nat = "Nat"
-printType `Bool = "Bool"
-printType (` t ⇨ s) = printType t Str.++ " -> " Str.++ printType s
-printType `Unit = "()"
-printType (` t × s) = "(" Str.++ printType t Str.++ " , " Str.++ printType s Str.++ ")"
-printType (` t + s) = "(" Str.++ printType t Str.++ " | " Str.++ printType s Str.++ ")"
-
-print : ∀ {e t} → Expr e t → Str.String
-print `false = "false"
-print `true = "true"
-print (`n x) = show x
-print `` x [ idx ] = Str.fromList (x List.∷ List.[])
-print (` f · x) = "(" Str.++ print f Str.++ " " Str.++ print x Str.++ ")"
-print (`λ x `of tx ⇨ expr) = "(λ " Str.++ Str.fromList (x List.∷ List.[]) Str.++ " : " Str.++ printType tx Str.++ " -> " Str.++ print expr Str.++ ")"
-print (` l + r) = "(" Str.++ print l Str.++ ") + (" Str.++ print r Str.++ ")"
-print (` l * r) = "(" Str.++ print l Str.++ ") * (" Str.++ print r Str.++ ")"
-print (` l ∧ r) = "(" Str.++ print l Str.++ ") ∧ (" Str.++ print r Str.++ ")"
-print (` l ∨ r) = "(" Str.++ print l Str.++ ") ∨ (" Str.++ print r Str.++ ")"
-print (` l ≤ r) = "(" Str.++ print l Str.++ ") ≤ (" Str.++ print r Str.++ ")"
-print (`¬ v) = "¬" Str.++ print v
-print (` l , r) = "(" Str.++ print l Str.++ " , " Str.++ print r Str.++ ")"
-print (`fst expr) = "(fst " Str.++ print expr Str.++ ")"
-print (`snd expr) = "(snd " Str.++ print expr Str.++ ")"
-print (`left expr) = "(left " Str.++ print expr Str.++ ")"
-print (`right expr) = "(right " Str.++ print expr Str.++ ")"
-print (`case v `of le || re) = "(case " Str.++
-                               print v Str.++
-                               "of" Str.++ print le Str.++ "||" Str.++ print re Str.++ ")"
-print `tt = "()"
-print (`let x := t `in b) = "(let " Str.++ Str.fromList (x List.∷ List.[]) Str.++ " = " Str.++ print t Str.++ " in " Str.++ print b Str.++ " )"
-print (`if b `then et `else ef) = "(if " Str.++ print b Str.++ " then " Str.++ print et Str.++ " else " Str.++ print ef Str.++ ")"
-
-interpret : ∀ {t} → Expr ε t → # t
+interpret : ∀ {t} → · ⊢ t → # t
 interpret = interpret' []
-  where interpret' : ∀ {e t} → Env e → Expr e t → # t
+  where interpret' : ∀ {Δ t} → ⟨ Δ ⟩ → Δ ⊢ t → # t
         interpret' env `true = true
         interpret' env `false = false
+        interpret' env `tt = U.unit
         interpret' env (`n n) = n
-        interpret' {tenv} env `` x [ idx ] = lookupEnv tenv env idx
-        interpret' env (` f · x) = (interpret' env f) (interpret' env x)
-        interpret' env (`λ _ `of tx ⇨ body) = λ (x : # tx) → interpret' (x ∷ env) body
+        interpret' env `` x [ idx ] = ! env [ idx ]
+        interpret' env (` f ₋ x) = (interpret' env f) (interpret' env x)
+        interpret' env (`λ _ `: tx ⇨ body) = λ (x : # tx) → interpret' (x ∷ env) body
         interpret' env (` l + r) = interpret' env l + interpret' env r
         interpret' env (` l * r) = interpret' env l * interpret' env r
         interpret' env (` l ∧ r) = interpret' env l ∧ interpret' env r
@@ -133,25 +108,45 @@ interpret = interpret' []
         interpret' env (`case s `of le || re) with interpret' env s
         interpret' env (`case s `of le || re) | inj₁ l = (interpret' env le) l
         interpret' env (`case s `of le || re) | inj₂ r = (interpret' env re) r
-        interpret' env `tt = U.unit
-        interpret' env (`let _ := h `in b) = interpret' (hval ∷ env) b
-          where hval = interpret' env h
+        interpret' env (`let _ `= h `in b) = let hval = interpret' env h in interpret' (hval ∷ env) b
         interpret' env (`if b `then et `else ef) with interpret' env b
         interpret' env (`if b `then et `else ef) | true = interpret' env et
         interpret' env (`if b `then et `else ef) | false = interpret' env ef
 
-testSimpleLambda : Expr ε `Nat
-testSimpleLambda = ` (`λ 'x' `of `Nat ⇨ ` `` 'x' [ H ] + `` 'x' [ H ]) · `n 10
+testSimpleLambda : · ⊢ `Nat
+testSimpleLambda = ` (`λ 'x' `: `Nat ⇨ ` `` 'x' [ H ] + `` 'x' [ H ]) ₋ `n 10
 
-testNestedLambda : Expr ε `Nat
-testNestedLambda = ` ` (`λ 'x' `of `Nat ⇨ (`λ 'y' `of `Nat ⇨ ` `` 'x' [ TH H ] + `` 'y' [ H ])) · `n 10 · `n 15
+testNestedLambda : · ⊢ `Nat
+testNestedLambda = ` ` (`λ 'x' `: `Nat ⇨ (`λ 'y' `: `Nat ⇨ ` `` 'x' [ TH H ] * `` 'y' [ H ])) ₋ `n 10 ₋ `n 15
 
 -- Should not work because the inner x is not bound to a boolean, and it should not be possible to refer to the outside x using Elem
---testNaming : Expr ε `Bool
---testNaming = ` ` `λ 'x' `of `Bool ⇨ (`λ 'x' `of `Unit ⇨ `` 'x' [ {!!} ]) · `true · `tt
+--testNamingNotWorking : · ⊢ `Bool
+--testNamingNotWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `` 'x' [ {!!} ]) ₋ `true ₋ `tt
 
-testSum1 : Expr ε `Nat
-testSum1 = `let 'n' := `case `left (`n 10) `of (`λ 'n' `of `Nat ⇨ `` 'n' [ H ]) || (`λ 'b' `of `Bool ⇨ (`if (`` 'b' [ H ]) `then `n 1 `else `n 0))  `in `` 'n' [ H ]  
+testNamingWorking : · ⊢ `Unit
+testNamingWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `` 'x' [ H ]) ₋ `true ₋ `tt
 
-testSum2 : Expr ε `Nat
-testSum2 = `let 'n' := `case `right `true `of (`λ 'n' `of `Nat ⇨ `` 'n' [ H ]) || (`λ 'b' `of `Bool ⇨ (`if (`` 'b' [ H ]) `then `n 1 `else `n 0))  `in `` 'n' [ H ]  
+testSum1 : · ⊢ `Nat
+testSum1 = `let 'n' `= `case `left (`n 10) `of 
+                              `λ 'n' `: `Nat ⇨ `` 'n' [ H ]
+                           || `λ 'b' `: `Bool ⇨ `if `` 'b' [ H ] `then `n 1 `else `n 0 
+           `in `` 'n' [ H ]  
+
+testSum2 : · ⊢ `Nat
+testSum2 = `let 'n' `= `case `right `true `of
+                              `λ 'n' `: `Nat ⇨ `` 'n' [ H ]
+                           || `λ 'b' `: `Bool ⇨ `if `` 'b' [ H ] `then `n 1 `else `n 0
+           `in `` 'n' [ H ]  
+
+testProduct1 : · ⊢ `Bool
+testProduct1 = `fst (` `true , (` `n 10 , `tt ))
+
+testProduct2 : · ⊢ ` `Nat × `Unit
+testProduct2 = `snd (` `true , (` `n 10 , `tt ))
+
+testDeMorganFullOr : · ⊢ `Bool
+testDeMorganFullOr = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ `¬ (` `` 'x' [ TH H ] ∨ `` 'y' [ H ])
+                     `in ` ` `` 's' [ H ] ₋ `true ₋ `true
+testDeMorganBrokenAnd : · ⊢ `Bool
+testDeMorganBrokenAnd = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ ` `¬ `` 'x' [ TH H ] ∧ `¬ `` 'y' [ H ]
+                        `in ` ` `` 's' [ H ] ₋ `true ₋ `true
