@@ -11,6 +11,7 @@ open import Relation.Nullary.Core
 import Data.String as Str
 open import Data.Nat.Show
 import Data.List as List
+open import Data.Empty
 
 infix 3 _:::_,_
 infix 2 _∈_
@@ -37,19 +38,19 @@ data Γ : Set where
   _:::_,_   : Char → `Set → Γ → Γ 
 
 data _∈_ :  Char → Γ → Set where
-  H  : ∀ {x x′ Δ t } → {{eq : (x == x′) ≡ true}} → x ∈ x′ ::: t , Δ
-  TH : ∀ {x y Δ t } → {{eq : (x == y) ≡ false}} → x ∈ Δ → x ∈ y ::: t , Δ
+  H  : ∀ {x Δ t } → x ∈ x ::: t , Δ
+  TH : ∀ {x y Δ t } → {{prf : x ∈ Δ}} → x ∈ y ::: t , Δ
 
 !Γ_[_] : ∀ {x} → (Δ : Γ) → x ∈ Δ → `Set
 !Γ_[_] · ()
 !Γ _ ::: t , Δ [ H ]     = t
-!Γ _ ::: _ , Δ [ TH i ]  = !Γ Δ [ i ]
+!Γ _ ::: _ , Δ [ TH {{prf = i}} ]  = !Γ Δ [ i ]
 
 data _⊢_ : Γ → `Set → Set where
   `false           : ∀ {Δ} → Δ ⊢ `Bool
   `true            : ∀ {Δ} → Δ ⊢ `Bool
   `n_              : ∀ {Δ} → ℕ → Δ ⊢ `Nat
-  ``_[_]           : ∀ {Δ} → (x : Char) → (i : x ∈ Δ) → Δ ⊢ !Γ Δ [ i ]
+  `v_              : ∀ {Δ} → (x : Char) → {{i : x ∈ Δ}} → Δ ⊢ !Γ Δ [ i ]
   `_₋_              : ∀ {Δ t s} → Δ ⊢ ` t ⇨ s → Δ ⊢ t → Δ ⊢ s
   `λ_`:_⇨_         : ∀ {Δ tr} → (x : Char) → (tx : `Set) 
                         → x ::: tx , Δ ⊢ tr → Δ ⊢ ` tx ⇨ tr
@@ -78,7 +79,7 @@ data ⟨_⟩ : Γ → Set₁ where
 !_[_] : ∀ {x Δ} → ⟨ Δ ⟩ → (i : x ∈ Δ) → # !Γ Δ [ i ]
 !_[_] [] ()
 !_[_] (val ∷ env) H      = val
-!_[_] (val ∷ env) (TH i) = ! env [ i ]
+!_[_] (val ∷ env) (TH {{prf = i}}) = ! env [ i ]
 
 interpret : ∀ {t} → · ⊢ t → # t
 interpret = interpret' []
@@ -87,7 +88,7 @@ interpret = interpret' []
         interpret' env `false = false
         interpret' env `tt = U.unit
         interpret' env (`n n) = n
-        interpret' env `` x [ idx ] = ! env [ idx ]
+        interpret' env ((`v x) {{i = idx}}) = ! env [ idx ]
         interpret' env (` f ₋ x) = (interpret' env f) (interpret' env x)
         interpret' env (`λ _ `: tx ⇨ body) = λ (x : # tx) → interpret' (x ∷ env) body
         interpret' env (` l + r) = interpret' env l + interpret' env r
@@ -114,29 +115,30 @@ interpret = interpret' []
         interpret' env (`if b `then et `else ef) | false = interpret' env ef
 
 testSimpleLambda : · ⊢ `Nat
-testSimpleLambda = ` (`λ 'x' `: `Nat ⇨ ` `` 'x' [ H ] + `` 'x' [ H ]) ₋ `n 10
+testSimpleLambda = ` (`λ 'x' `: `Nat ⇨ ` `v 'x' + `v 'x') ₋ `n 10
 
 testNestedLambda : · ⊢ `Nat
-testNestedLambda = ` ` (`λ 'x' `: `Nat ⇨ (`λ 'y' `: `Nat ⇨ ` `` 'x' [ TH H ] * `` 'y' [ H ])) ₋ `n 10 ₋ `n 15
+testNestedLambda = ` ` (`λ 'x' `: `Nat ⇨ (`λ 'y' `: `Nat ⇨ ` `v 'x' * `v 'y')) ₋ `n 10 ₋ `n 15
 
 -- Should not work because the inner x is not bound to a boolean, and it should not be possible to refer to the outside x using Elem
+-- TODO Fix this to not work with instance search
 --testNamingNotWorking : · ⊢ `Bool
---testNamingNotWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `` 'x' [ {!!} ]) ₋ `true ₋ `tt
+--testNamingNotWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `v 'x') ₋ `true ₋ `tt
 
 testNamingWorking : · ⊢ `Unit
-testNamingWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `` 'x' [ H ]) ₋ `true ₋ `tt
+testNamingWorking = ` ` `λ 'x' `: `Bool ⇨ (`λ 'x' `: `Unit ⇨ `v 'x') ₋ `true ₋ `tt
 
 testSum1 : · ⊢ `Nat
 testSum1 = `let 'n' `= `case `left (`n 10) `of 
-                              `λ 'n' `: `Nat ⇨ `` 'n' [ H ]
-                           || `λ 'b' `: `Bool ⇨ `if `` 'b' [ H ] `then `n 1 `else `n 0 
-           `in `` 'n' [ H ]  
+                              `λ 'n' `: `Nat ⇨ `v 'n'
+                           || `λ 'b' `: `Bool ⇨ `if `v 'b' `then `n 1 `else `n 0 
+           `in `v 'n'  
 
 testSum2 : · ⊢ `Nat
 testSum2 = `let 'n' `= `case `right `true `of
-                              `λ 'n' `: `Nat ⇨ `` 'n' [ H ]
-                           || `λ 'b' `: `Bool ⇨ `if `` 'b' [ H ] `then `n 1 `else `n 0
-           `in `` 'n' [ H ]  
+                              `λ 'n' `: `Nat ⇨ `v 'n'
+                           || `λ 'b' `: `Bool ⇨ `if `v 'b' `then `n 1 `else `n 0
+           `in `v 'n'  
 
 testProduct1 : · ⊢ `Bool
 testProduct1 = `fst (` `true , (` `n 10 , `tt ))
@@ -145,8 +147,8 @@ testProduct2 : · ⊢ ` `Nat × `Unit
 testProduct2 = `snd (` `true , (` `n 10 , `tt ))
 
 testDeMorganFullOr : · ⊢ `Bool
-testDeMorganFullOr = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ `¬ (` `` 'x' [ TH H ] ∨ `` 'y' [ H ])
-                     `in ` ` `` 's' [ H ] ₋ `true ₋ `true
+testDeMorganFullOr = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ `¬ (` `v 'x' ∨ `v 'y')
+                     `in ` ` `v 's'₋ `true ₋ `true
 testDeMorganBrokenAnd : · ⊢ `Bool
-testDeMorganBrokenAnd = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ ` `¬ `` 'x' [ TH H ] ∧ `¬ `` 'y' [ H ]
-                        `in ` ` `` 's' [ H ] ₋ `true ₋ `true
+testDeMorganBrokenAnd = `let 's' `= `λ 'x' `: `Bool ⇨ `λ 'y' `: `Bool ⇨ ` `¬ `v 'x' ∧ `¬ `v 'y'
+                        `in ` ` `v 's' ₋ `true ₋ `true
